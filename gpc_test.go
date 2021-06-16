@@ -139,9 +139,9 @@ type RemoveResult struct {
 func (f *FriendManagerProc) Remove(arg *RemoveArgs, result *RemoveResult) error {
 	if !f.fm.remove(arg.id) {
 		result.res = false
-		return fmt.Errorf("remove friend %v failed", arg.id)
+	} else {
+		result.res = true
 	}
-	result.res = true
 	return nil
 }
 

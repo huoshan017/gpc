@@ -68,6 +68,7 @@ func (g *gpcBase) Init(callMethod func(string, interface{}, interface{}) error) 
 func (g *gpcBase) Call(methodName string, param interface{}, result interface{}) (err error) {
 	// 错误通道
 	resChan := make(chan error)
+	defer close(resChan)
 
 	// 调用超时通道
 	var startTimerChan chan *time.Timer
@@ -89,6 +90,7 @@ func (g *gpcBase) Call(methodName string, param interface{}, result interface{})
 	if startTimerChan != nil {
 		// 取出计时器
 		timer := <-startTimerChan
+		close(startTimerChan)
 		// 等待結果的處理
 		select {
 		// todo 注意这里的time.Time通道会在超时后由计时器内部关闭
