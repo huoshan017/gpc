@@ -40,15 +40,18 @@ type gpcBase struct {
 	callMethodFunc func(string, interface{}, interface{}) error
 }
 
+// 设置数据通道长度
 func (g *gpcBase) SetChannelLen(length int) {
 	g.chLen = length
 }
 
+// 设置调用超时
 func (g *gpcBase) SetCallTimeout(timeout int) {
 	g.callTimeout = timeout
 }
 
-func (g *gpcBase) Init() {
+// 初始化
+func (g *gpcBase) Init(callMethod func(string, interface{}, interface{}) error) {
 	if g.chLen <= 0 {
 		g.chLen = GPC_CHANNEL_LEN
 	}
@@ -56,17 +59,23 @@ func (g *gpcBase) Init() {
 	if g.callTimeout == 0 {
 		g.callTimeout = GPC_CALL_TIMEOUT
 	}
+	// 在这里给Run中调用的处理函数赋值，目前没有更好的方法，这算是最简单的做法了
+	g.callMethodFunc = callMethod
 	g.isRun = 1
 }
 
+// 用于外部调用的方法
 func (g *gpcBase) Call(methodName string, param interface{}, result interface{}) (err error) {
+	// 错误通道
 	resChan := make(chan error)
+
+	// 调用超时通道
 	var startTimerChan chan *time.Timer
-	// 需要调用超时
 	if g.callTimeout >= 0 {
 		startTimerChan = make(chan *time.Timer)
 	}
 
+	// 调用数据
 	d := &data{
 		method:         methodName,
 		param:          param,
@@ -76,25 +85,26 @@ func (g *gpcBase) Call(methodName string, param interface{}, result interface{})
 	}
 	g.ch <- d
 
-	// 有调用超时检测
+	// 调用超时检测
 	if startTimerChan != nil {
 		// 取出计时器
 		timer := <-startTimerChan
 		// 等待結果的處理
 		select {
-			// todo 注意这里的time.Time通道会在超时后有计时器内部关闭
+		// todo 注意这里的time.Time通道会在超时后由计时器内部关闭
 		case <-timer.C:
 			err = fmt.Errorf("gpc: call method (%v) timeout", methodName)
-			// 等待结果
+			// 等待错误结果
 		case err = <-resChan:
 		}
-	} else {
+	} else { // 只有错误结果
 		err = <-resChan
 	}
 
 	return err
 }
 
+// 循环执行，为了不阻塞调用的goroutine，一般要加上go关键字再执行
 func (g *gpcBase) Run() {
 	for atomic.LoadInt32(&g.isRun) > 0 {
 		d := <-g.ch
@@ -108,6 +118,7 @@ func (g *gpcBase) Run() {
 	}
 }
 
+// 停止
 func (g *gpcBase) Stop() {
 	atomic.StoreInt32(&g.isRun, 0)
 }

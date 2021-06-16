@@ -4,20 +4,24 @@ import (
 	"fmt"
 )
 
+// 调用处理器
 type Handler struct {
 	handlerMap map[string]func(param interface{}, result interface{}) error
 }
 
+// 创建调用处理器
 func NewHandler() *Handler {
 	return &Handler{
 		handlerMap: make(map[string]func(param interface{}, result interface{}) error),
 	}
 }
 
+// 注册一个处理函数
 func (h *Handler) RegisterHandle(method string, handleFunc func(param interface{}, result interface{}) error) {
 	h.handlerMap[method] = handleFunc
 }
 
+// 外部调用处理
 func (h *Handler) Handle(method string, param interface{}, result interface{}) error {
 	handle, o := h.handlerMap[method]
 	if !o {
@@ -26,13 +30,13 @@ func (h *Handler) Handle(method string, param interface{}, result interface{}) e
 	return handle(param, result)
 }
 
-// struct for fast goroutine procedure call
+// 快速gpc结构
 type GPCFast struct {
 	handler *Handler
 	gpcBase
 }
 
-// create new GPC
+// 创建一个快速的gpc
 func NewGPCFast(handler *Handler, options ...GPCOption) *GPCFast {
 	gpc := &GPCFast{
 		handler: handler,
@@ -40,9 +44,7 @@ func NewGPCFast(handler *Handler, options ...GPCOption) *GPCFast {
 	for _, option := range options {
 		option(gpc)
 	}
-	gpc.Init()
-	// 在这里给gpcBase.Run中调用的处理函数赋值，目前没有更好的方法，这算是最简单的做法了
-	gpc.callMethodFunc = gpc.callMethod
+	gpc.Init(gpc.callMethod)
 	return gpc
 }
 
