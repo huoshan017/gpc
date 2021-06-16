@@ -41,12 +41,12 @@ func NewGPCFast(handler *Handler, options ...GPCOption) *GPCFast {
 		option(gpc)
 	}
 	gpc.Init()
-	// 在这里给Run中调用的处理函数赋值，有点丑，目前只能这么做，算是最简单的做法了
+	// 在这里给gpcBase.Run中调用的处理函数赋值，目前没有更好的方法，这算是最简单的做法了
 	gpc.callMethodFunc = gpc.callMethod
 	return gpc
 }
 
-// Run中调用的处理函数，因为go无法支持在一个类型中的调用接口达到虚函数的效果
+// Run中调用的处理函数，因为go无法支持在一个类型中的方法中调用接口达到虚函数的效果
 func (g *GPCFast) callMethod(method string, param interface{}, result interface{}) error {
 	return g.handler.Handle(method, param, result)
 }
