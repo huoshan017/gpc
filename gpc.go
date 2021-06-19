@@ -37,7 +37,7 @@ func NewGPC(options ...GPCOption) *GPC {
 	for _, option := range options {
 		option(gpc)
 	}
-	gpc.Init(gpc.callMethod)
+	gpc.init(gpc.callMethod)
 	return gpc
 }
 

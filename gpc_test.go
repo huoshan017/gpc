@@ -71,7 +71,7 @@ func TestFriend(t *testing.T) {
 	handler.RegisterHandle("remove", fmw.remove)
 	handler.RegisterHandle("output", fmw.output)
 
-	idMax := 1000000
+	idMax := 10000000
 	friendGpc := NewGPCFast(handler, ChannelLen(idMax))
 	go friendGpc.Run()
 
@@ -80,11 +80,10 @@ func TestFriend(t *testing.T) {
 
 	// add goroutine
 	go func() {
+		f := &friend{}
 		for id := 1; id <= idMax; id++ {
-			f := &friend{
-				id:   id,
-				name: fmt.Sprintf("f_%v", id),
-			}
+			f.id = id
+			f.name = fmt.Sprintf("f_%v", id)
 			friendGpc.Call("add", f, nil)
 			friendGpc.Call("output", nil, nil)
 		}
@@ -156,7 +155,7 @@ func (f *FriendManagerProc) Output(arg *OutputArgs, result *OutputResult) error 
 }
 
 func TestFriend2(t *testing.T) {
-	idLength := 1000000
+	idLength := 10000000
 	gpc := NewGPC(ChannelLen(idLength))
 	err := gpc.Register(newFriendManagerProc())
 	if err != nil {
@@ -170,16 +169,18 @@ func TestFriend2(t *testing.T) {
 
 	// add goroutine
 	go func() {
+		addArgs := &AddArgs{f: &friend{}}
+		addResult := &AddResult{}
+		outputArgs := &OutputArgs{}
+		outputResult := &OutputResult{}
 		for id := 1; id <= idLength; id++ {
-			f := &friend{
-				id:   id,
-				name: fmt.Sprintf("f_%v", id),
-			}
-			err := gpc.Call("FriendManagerProc.Add", &AddArgs{f: f}, &AddResult{})
+			addArgs.f.id = id
+			addArgs.f.name = fmt.Sprintf("f_%v", id)
+			err := gpc.Call("FriendManagerProc.Add", addArgs, addResult)
 			if err != nil {
 				t.Error(err)
 			}
-			err = gpc.Call("FriendManagerProc.Output", &OutputArgs{}, &OutputResult{})
+			err = gpc.Call("FriendManagerProc.Output", outputArgs, outputResult)
 			if err != nil {
 				t.Error(err)
 			}
@@ -189,14 +190,18 @@ func TestFriend2(t *testing.T) {
 
 	// remove goroutine
 	go func() {
+		removeArgs := &RemoveArgs{}
+		removeResult := &RemoveResult{}
+		outputArgs := &OutputArgs{}
+		outputResult := &OutputResult{}
 		for id := idLength; id >= 1; id-- {
-			result := &RemoveResult{}
-			err := gpc.Call("FriendManagerProc.Remove", &RemoveArgs{id: id}, result)
+			removeArgs.id = id
+			err := gpc.Call("FriendManagerProc.Remove", removeArgs, removeResult)
 			if err != nil {
 				t.Error(err.Error())
 			}
-			if result.res {
-				err = gpc.Call("FriendManagerProc.Output", &OutputArgs{}, &OutputResult{})
+			if removeResult.res {
+				err = gpc.Call("FriendManagerProc.Output", outputArgs, outputResult)
 				if err != nil {
 					t.Error(err)
 				}

@@ -3,7 +3,6 @@ package gpc
 import (
 	"fmt"
 	"reflect"
-	"sync/atomic"
 	"time"
 )
 
@@ -25,7 +24,7 @@ const (
 // because Typeof takes an empty interface value. This is annoying.
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
 
-// 设置参数的接口
+// gpc接口
 type IGPC interface {
 	SetChannelLen(length int)
 	SetCallTimeout(timeout int)
@@ -36,8 +35,8 @@ type gpcBase struct {
 	ch             chan *data
 	chLen          int
 	callTimeout    int // 毫秒
-	isRun          int32
 	callMethodFunc func(string, interface{}, interface{}) error
+	closeChan      chan struct{}
 }
 
 // 设置数据通道长度
@@ -51,7 +50,7 @@ func (g *gpcBase) SetCallTimeout(timeout int) {
 }
 
 // 初始化
-func (g *gpcBase) Init(callMethod func(string, interface{}, interface{}) error) {
+func (g *gpcBase) init(callMethod func(string, interface{}, interface{}) error) {
 	if g.chLen <= 0 {
 		g.chLen = GPC_CHANNEL_LEN
 	}
@@ -61,10 +60,10 @@ func (g *gpcBase) Init(callMethod func(string, interface{}, interface{}) error) 
 	}
 	// 在这里给Run中调用的处理函数赋值，目前没有更好的方法，这算是最简单的做法了
 	g.callMethodFunc = callMethod
-	g.isRun = 1
+	g.closeChan = make(chan struct{})
 }
 
-// 用于外部调用的方法
+// 用于外部调用的方法，同步调用
 func (g *gpcBase) Call(methodName string, param interface{}, result interface{}) (err error) {
 	// 错误通道
 	resChan := make(chan error)
@@ -74,6 +73,7 @@ func (g *gpcBase) Call(methodName string, param interface{}, result interface{})
 	var startTimerChan chan *time.Timer
 	if g.callTimeout >= 0 {
 		startTimerChan = make(chan *time.Timer)
+		defer close(startTimerChan)
 	}
 
 	// 调用数据
@@ -90,7 +90,6 @@ func (g *gpcBase) Call(methodName string, param interface{}, result interface{})
 	if startTimerChan != nil {
 		// 取出计时器
 		timer := <-startTimerChan
-		close(startTimerChan)
 		// 等待結果的處理
 		select {
 		// todo 注意这里的time.Time通道会在超时后由计时器内部关闭
@@ -108,19 +107,24 @@ func (g *gpcBase) Call(methodName string, param interface{}, result interface{})
 
 // 循环执行，为了不阻塞调用的goroutine，一般要加上go关键字再执行
 func (g *gpcBase) Run() {
-	for atomic.LoadInt32(&g.isRun) > 0 {
-		d := <-g.ch
-		// 开启一个计时器
-		if d.startTimerChan != nil {
-			d.startTimerChan <- time.NewTimer(time.Millisecond * GPC_CALL_TIMEOUT)
+	isRun := true
+	for isRun {
+		select {
+		case d := <-g.ch:
+			// 开启一个计时器
+			if d.startTimerChan != nil {
+				d.startTimerChan <- time.NewTimer(time.Millisecond * GPC_CALL_TIMEOUT)
+			}
+			// 處理GPC調用
+			err := g.callMethodFunc(d.method, d.param, d.result)
+			d.resChan <- err
+		case <-g.closeChan:
+			isRun = false
 		}
-		// 處理GPC調用
-		err := g.callMethodFunc(d.method, d.param, d.result)
-		d.resChan <- err
 	}
 }
 
-// 停止
-func (g *gpcBase) Stop() {
-	atomic.StoreInt32(&g.isRun, 0)
+// 关闭
+func (g *gpcBase) Close() {
+	close(g.closeChan)
 }
