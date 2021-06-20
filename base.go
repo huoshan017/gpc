@@ -24,39 +24,22 @@ const (
 // because Typeof takes an empty interface value. This is annoying.
 var typeOfError = reflect.TypeOf((*error)(nil)).Elem()
 
-// gpc接口
-type IGPC interface {
-	SetChannelLen(length int)
-	SetCallTimeout(timeout int)
-}
-
 // gpc的基础结构，封装了基础功能
 type gpcBase struct {
+	options        Options
 	ch             chan *data
-	chLen          int
-	callTimeout    int // 毫秒
 	callMethodFunc func(string, interface{}, interface{}) error
 	closeChan      chan struct{}
 }
 
-// 设置数据通道长度
-func (g *gpcBase) SetChannelLen(length int) {
-	g.chLen = length
-}
-
-// 设置调用超时
-func (g *gpcBase) SetCallTimeout(timeout int) {
-	g.callTimeout = timeout
-}
-
 // 初始化
 func (g *gpcBase) init(callMethod func(string, interface{}, interface{}) error) {
-	if g.chLen <= 0 {
-		g.chLen = GPC_CHANNEL_LEN
+	if g.options.chLen <= 0 {
+		g.options.chLen = GPC_CHANNEL_LEN
 	}
-	g.ch = make(chan *data, g.chLen)
-	if g.callTimeout == 0 {
-		g.callTimeout = GPC_CALL_TIMEOUT
+	g.ch = make(chan *data, g.options.chLen)
+	if g.options.callTimeout == 0 {
+		g.options.callTimeout = GPC_CALL_TIMEOUT
 	}
 	// 在这里给Run中调用的处理函数赋值，目前没有更好的方法，这算是最简单的做法了
 	g.callMethodFunc = callMethod
@@ -71,7 +54,7 @@ func (g *gpcBase) Call(methodName string, param interface{}, result interface{})
 
 	// 调用超时通道
 	var startTimerChan chan *time.Timer
-	if g.callTimeout >= 0 {
+	if g.options.callTimeout >= 0 {
 		startTimerChan = make(chan *time.Timer)
 		defer close(startTimerChan)
 	}

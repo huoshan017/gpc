@@ -42,7 +42,7 @@ func NewGPCFast(handler *Handler, options ...GPCOption) *GPCFast {
 		handler: handler,
 	}
 	for _, option := range options {
-		option(gpc)
+		option(gpc.options)
 	}
 	gpc.init(gpc.callMethod)
 	return gpc

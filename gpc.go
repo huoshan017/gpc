@@ -35,7 +35,7 @@ type GPC struct {
 func NewGPC(options ...GPCOption) *GPC {
 	gpc := &GPC{}
 	for _, option := range options {
-		option(gpc)
+		option(gpc.options)
 	}
 	gpc.init(gpc.callMethod)
 	return gpc

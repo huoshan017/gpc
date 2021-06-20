@@ -1,21 +1,34 @@
 package gpc
 
-type GPCOption func(IGPC)
+type Options struct {
+	chLen       int
+	callTimeout int // 毫秒
+}
+
+func (option *Options) SetChannelLen(length int) {
+	option.chLen = length
+}
+
+func (option *Options) SetCallTimeout(timeout int) {
+	option.callTimeout = timeout
+}
+
+type GPCOption func(Options)
 
 func ChannelLen(length int) GPCOption {
-	return func(g IGPC) {
-		g.SetChannelLen(length)
+	return func(option Options) {
+		option.SetChannelLen(length)
 	}
 }
 
 func CallTimeout(timeout int) GPCOption {
-	return func(g IGPC) {
-		g.SetCallTimeout(timeout)
+	return func(option Options) {
+		option.SetCallTimeout(timeout)
 	}
 }
 
 func NoCallTimeout() GPCOption {
-	return func(g IGPC) {
-		g.SetCallTimeout(GPC_CALL_NO_TIMEOUT)
+	return func(option Options) {
+		option.SetCallTimeout(GPC_CALL_NO_TIMEOUT)
 	}
 }
