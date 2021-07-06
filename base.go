@@ -2,6 +2,7 @@ package gpc
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"time"
 )
@@ -44,6 +45,16 @@ func (g *gpcBase) init(callMethod func(string, interface{}, interface{}) error) 
 	// 在这里给Run中调用的处理函数赋值，目前没有更好的方法，这算是最简单的做法了
 	g.callMethodFunc = callMethod
 	g.closeChan = make(chan struct{})
+}
+
+// 外部调用无返回值的方法
+func (g *gpcBase) CallNoResult(methodName string, param interface{}) {
+	// 调用数据
+	d := &data{
+		method: methodName,
+		param:  param,
+	}
+	g.ch <- d
 }
 
 // 用于外部调用的方法，同步调用
@@ -94,13 +105,20 @@ func (g *gpcBase) Run() {
 	for isRun {
 		select {
 		case d := <-g.ch:
-			// 开启一个计时器
-			if d.startTimerChan != nil {
-				d.startTimerChan <- time.NewTimer(time.Millisecond * GPC_CALL_TIMEOUT)
+			if d.result != nil {
+				// 开启一个计时器
+				if d.startTimerChan != nil {
+					d.startTimerChan <- time.NewTimer(time.Millisecond * GPC_CALL_TIMEOUT)
+				}
+				// 處理GPC調用
+				err := g.callMethodFunc(d.method, d.param, d.result)
+				d.resChan <- err
+			} else {
+				err := g.callMethodFunc(d.method, d.param, nil)
+				if err != nil {
+					fmt.Fprintf(os.Stdout, "gpc: call no result method (%v) err: %v", d.method, err)
+				}
 			}
-			// 處理GPC調用
-			err := g.callMethodFunc(d.method, d.param, d.result)
-			d.resChan <- err
 		case <-g.closeChan:
 			isRun = false
 		}

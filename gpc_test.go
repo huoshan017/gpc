@@ -73,6 +73,8 @@ func TestFriend(t *testing.T) {
 
 	idMax := 10000000
 	friendGpc := NewGPCFast(handler, ChannelLen(idMax))
+	defer friendGpc.Close()
+
 	go friendGpc.Run()
 
 	wg := &sync.WaitGroup{}
@@ -154,18 +156,33 @@ func (f *FriendManagerProc) Output(arg *OutputArgs, result *OutputResult) error 
 	return nil
 }
 
+type NoActionArgs struct {
+}
+
+func (f *FriendManagerProc) NoAction(arg *NoActionArgs) {
+}
+
 func TestFriend2(t *testing.T) {
 	idLength := 10000000
-	gpc := NewGPC(ChannelLen(idLength))
-	err := gpc.Register(newFriendManagerProc())
+	gpcFriend := NewGPC(ChannelLen(idLength))
+	err := gpcFriend.Register(newFriendManagerProc())
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	go gpc.Run()
+	defer gpcFriend.Close()
+
+	go gpcFriend.Run()
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
+
+	go func() {
+		noArgs := &NoActionArgs{}
+		for id := 1; id <= idLength; id++ {
+			gpcFriend.CallNoResult("FriendManagerProc.NoAction", noArgs)
+		}
+	}()
 
 	// add goroutine
 	go func() {
@@ -176,14 +193,15 @@ func TestFriend2(t *testing.T) {
 		for id := 1; id <= idLength; id++ {
 			addArgs.f.id = id
 			addArgs.f.name = fmt.Sprintf("f_%v", id)
-			err := gpc.Call("FriendManagerProc.Add", addArgs, addResult)
+			err := gpcFriend.Call("FriendManagerProc.Add", addArgs, addResult)
 			if err != nil {
 				t.Error(err)
 			}
-			err = gpc.Call("FriendManagerProc.Output", outputArgs, outputResult)
+			err = gpcFriend.Call("FriendManagerProc.Output", outputArgs, outputResult)
 			if err != nil {
 				t.Error(err)
 			}
+
 		}
 		wg.Done()
 	}()
@@ -196,12 +214,12 @@ func TestFriend2(t *testing.T) {
 		outputResult := &OutputResult{}
 		for id := idLength; id >= 1; id-- {
 			removeArgs.id = id
-			err := gpc.Call("FriendManagerProc.Remove", removeArgs, removeResult)
+			err := gpcFriend.Call("FriendManagerProc.Remove", removeArgs, removeResult)
 			if err != nil {
 				t.Error(err.Error())
 			}
 			if removeResult.res {
-				err = gpc.Call("FriendManagerProc.Output", outputArgs, outputResult)
+				err = gpcFriend.Call("FriendManagerProc.Output", outputArgs, outputResult)
 				if err != nil {
 					t.Error(err)
 				}
