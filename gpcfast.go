@@ -44,11 +44,16 @@ func NewGPCFast(handler *Handler, options ...GPCOption) *GPCFast {
 	for _, option := range options {
 		option(gpc.options)
 	}
-	gpc.init(gpc.callMethod)
+	gpc.init(gpc.callMethod, gpc.postMethod)
 	return gpc
 }
 
 // Run中调用的处理函数，因为go无法支持在一个类型中的方法中调用接口达到虚函数的效果
 func (g *GPCFast) callMethod(method string, param interface{}, result interface{}) error {
 	return g.handler.Handle(method, param, result)
+}
+
+// 不需要返回值的函数
+func (g *GPCFast) postMethod(method string, param interface{}) {
+	g.handler.Handle(method, param, nil)
 }

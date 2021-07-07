@@ -2,7 +2,6 @@ package gpc
 
 import (
 	"fmt"
-	"os"
 	"reflect"
 	"time"
 )
@@ -11,7 +10,7 @@ type data struct {
 	method         string
 	param          interface{}
 	result         interface{}
-	resChan        chan error
+	errChan        chan error
 	startTimerChan chan *time.Timer
 }
 
@@ -30,11 +29,12 @@ type gpcBase struct {
 	options        Options
 	ch             chan *data
 	callMethodFunc func(string, interface{}, interface{}) error
+	postMethodFunc func(string, interface{})
 	closeChan      chan struct{}
 }
 
 // 初始化
-func (g *gpcBase) init(callMethod func(string, interface{}, interface{}) error) {
+func (g *gpcBase) init(callMethod func(string, interface{}, interface{}) error, postMethod func(string, interface{})) {
 	if g.options.chLen <= 0 {
 		g.options.chLen = GPC_CHANNEL_LEN
 	}
@@ -44,11 +44,12 @@ func (g *gpcBase) init(callMethod func(string, interface{}, interface{}) error) 
 	}
 	// 在这里给Run中调用的处理函数赋值，目前没有更好的方法，这算是最简单的做法了
 	g.callMethodFunc = callMethod
+	g.postMethodFunc = postMethod
 	g.closeChan = make(chan struct{})
 }
 
 // 外部调用无返回值的方法
-func (g *gpcBase) CallNoResult(methodName string, param interface{}) {
+func (g *gpcBase) Post(methodName string, param interface{}) {
 	// 调用数据
 	d := &data{
 		method: methodName,
@@ -59,9 +60,13 @@ func (g *gpcBase) CallNoResult(methodName string, param interface{}) {
 
 // 用于外部调用的方法，同步调用
 func (g *gpcBase) Call(methodName string, param interface{}, result interface{}) (err error) {
+	if result == nil {
+		panic("gpc: Call result param cant be nil")
+	}
+
 	// 错误通道
-	resChan := make(chan error)
-	defer close(resChan)
+	errChan := make(chan error)
+	defer close(errChan)
 
 	// 调用超时通道
 	var startTimerChan chan *time.Timer
@@ -75,7 +80,7 @@ func (g *gpcBase) Call(methodName string, param interface{}, result interface{})
 		method:         methodName,
 		param:          param,
 		result:         result,
-		resChan:        resChan,
+		errChan:        errChan,
 		startTimerChan: startTimerChan,
 	}
 	g.ch <- d
@@ -90,10 +95,10 @@ func (g *gpcBase) Call(methodName string, param interface{}, result interface{})
 		case <-timer.C:
 			err = fmt.Errorf("gpc: call method (%v) timeout", methodName)
 			// 等待错误结果
-		case err = <-resChan:
+		case err = <-errChan:
 		}
 	} else { // 只有错误结果
-		err = <-resChan
+		err = <-errChan
 	}
 
 	return err
@@ -112,12 +117,9 @@ func (g *gpcBase) Run() {
 				}
 				// 處理GPC調用
 				err := g.callMethodFunc(d.method, d.param, d.result)
-				d.resChan <- err
+				d.errChan <- err
 			} else {
-				err := g.callMethodFunc(d.method, d.param, nil)
-				if err != nil {
-					fmt.Fprintf(os.Stdout, "gpc: call no result method (%v) err: %v", d.method, err)
-				}
+				g.postMethodFunc(d.method, d.param)
 			}
 		case <-g.closeChan:
 			isRun = false

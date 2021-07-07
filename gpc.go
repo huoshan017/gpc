@@ -2,10 +2,11 @@ package gpc
 
 import (
 	"errors"
+	"fmt"
 	"log"
+	"os"
 	"reflect"
 	"strings"
-	"sync"
 	"unicode"
 	"unicode/utf8"
 )
@@ -27,17 +28,17 @@ type service struct {
 
 // gpc结构
 type GPC struct {
-	serviceMap sync.Map
+	serviceMap map[string]interface{}
 	gpcBase
 }
 
 // 创建一个gpc
 func NewGPC(options ...GPCOption) *GPC {
-	gpc := &GPC{}
+	gpc := &GPC{serviceMap: make(map[string]interface{})}
 	for _, option := range options {
 		option(gpc.options)
 	}
-	gpc.init(gpc.callMethod)
+	gpc.init(gpc.callMethod, gpc.postMethod)
 	return gpc
 }
 
@@ -65,9 +66,13 @@ func (g *GPC) Register(rcvr interface{}) error {
 		log.Print(str)
 		return errors.New(str)
 	}
-	if _, dup := g.serviceMap.LoadOrStore(sname, s); dup {
+
+	if _, dup := g.serviceMap[sname]; dup {
 		return errors.New("gpc: service already defined: " + sname)
 	}
+
+	g.serviceMap[sname] = s
+
 	return nil
 }
 
@@ -81,6 +86,19 @@ func (g *GPC) callMethod(method string, param interface{}, result interface{}) e
 		err = errInter.(error)
 	}
 	return err
+}
+
+func (g *GPC) postMethod(method string, param interface{}) {
+	service, mtype, err := g.getMethod(method)
+	function := mtype.method.Func
+	returnValues := function.Call([]reflect.Value{service.rcvr, reflect.ValueOf(param)})
+	errInter := returnValues[0].Interface()
+	if errInter != nil {
+		err = errInter.(error)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stdout, "gpc: post method %v err: %v", method, err)
+	}
 }
 
 // 内部方法，是否已导出
@@ -109,9 +127,9 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 			continue
 		}
 		// 方法需要三个传入参数： 接收者，参数，回复
-		if method.Type.NumIn() != 3 {
+		if method.Type.NumIn() != 3 && method.Type.NumIn() != 2 {
 			if reportErr {
-				log.Printf("gpc.Register: method %q has %d input parameters; need exactly three\n", mname, mtype.NumIn())
+				log.Printf("gpc.Register: method %q has %d input parameters; need exactly three or two\n", mname, mtype.NumIn())
 			}
 			continue
 		}
@@ -123,20 +141,23 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 			}
 			continue
 		}
-		// 第二个参数必须是指针
-		replyType := mtype.In(2)
-		if replyType.Kind() != reflect.Ptr {
-			if reportErr {
-				log.Printf("gpc.Register: reply type of method %q is not a pointer: %q\n", mname, replyType)
+		var replyType reflect.Type
+		if method.Type.NumIn() == 3 {
+			// 第二个参数必须是指针
+			replyType = mtype.In(2)
+			if replyType.Kind() != reflect.Ptr {
+				if reportErr {
+					log.Printf("gpc.Register: reply type of method %q is not a pointer: %q\n", mname, replyType)
+				}
+				continue
 			}
-			continue
-		}
-		// 回复参数类型必须已导出
-		if !isExportedOrBuiltinType(replyType) {
-			if reportErr {
-				log.Printf("gpc.Register: reply type of method %q is not exported: %q\n", mname, replyType)
+			// 回复参数类型必须已导出
+			if !isExportedOrBuiltinType(replyType) {
+				if reportErr {
+					log.Printf("gpc.Register: reply type of method %q is not exported: %q\n", mname, replyType)
+				}
+				continue
 			}
-			continue
 		}
 		// 方法必须有一个传出参数
 		if mtype.NumOut() != 1 {
@@ -167,7 +188,7 @@ func (g *GPC) getMethod(method string) (svc *service, mtype *methodType, err err
 	serviceName := method[:dot]
 	methodName := method[dot+1:]
 
-	svci, o := g.serviceMap.Load(serviceName)
+	svci, o := g.serviceMap[serviceName]
 	if !o {
 		err = errors.New("gpc: can't find service " + method)
 		return
