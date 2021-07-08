@@ -90,12 +90,9 @@ func One() {
 				id:   id,
 				name: fmt.Sprintf("f_%v", id),
 			}
-			err := friendGpc.Call("add", f, nil)
-			if err != nil {
-				panic(fmt.Sprintf("call add %v panic", *f))
-			}
+			friendGpc.Post("add", f)
 			fmt.Printf("add friend %v\n", id)
-			friendGpc.Call("output", nil, nil)
+			friendGpc.Post("output", nil)
 		}
 	}()
 
@@ -109,17 +106,14 @@ func One() {
 			}
 			if result {
 				fmt.Printf("remove friend %v\n", id)
-				friendGpc.Call("output", nil, nil)
+				friendGpc.Post("output", nil)
 			}
 		}
 	}()
 
 	go func() {
 		time.Sleep(1 * time.Millisecond)
-		err := friendGpc.Call("timeout", nil, nil)
-		if err != nil {
-			panic(fmt.Sprintf("%v panic", err))
-		}
+		friendGpc.Post("timeout", nil)
 	}()
 
 	go friendGpc.Run()
