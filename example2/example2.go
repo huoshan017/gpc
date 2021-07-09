@@ -74,8 +74,7 @@ func (f *FriendManagerProc) Remove(arg *RemoveArgs, result *RemoveReplys) error 
 
 func main() {
 	idLength := 100000
-	gpcFriend := gpc.NewGPC(gpc.ChannelLen(idLength))
-	err := gpcFriend.Register(newFriendManagerProc())
+	gpcFriend, err := gpc.NewGPC(newFriendManagerProc(), gpc.ChannelLen(idLength))
 	if err != nil {
 		return
 	}

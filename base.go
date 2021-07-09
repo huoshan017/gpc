@@ -18,6 +18,7 @@ const (
 	GPC_CHANNEL_LEN     = 100
 	GPC_CALL_TIMEOUT    = 1000 // 默認調用超時爲1000毫秒
 	GPC_CALL_NO_TIMEOUT = -1   // 沒有超時
+	GPC_TICK_MS         = 10   // 定时器函数调用间隔
 )
 
 // Precompute the reflect type for error. Can't use error directly
@@ -30,11 +31,15 @@ type gpcBase struct {
 	ch             chan *data
 	callMethodFunc func(string, interface{}, interface{}) error
 	postMethodFunc func(string, interface{})
+	tickMethodFunc func(tick int32)
 	closeChan      chan struct{}
 }
 
 // 初始化
-func (g *gpcBase) init(callMethod func(string, interface{}, interface{}) error, postMethod func(string, interface{})) {
+func (g *gpcBase) init(
+	callMethod func(string, interface{}, interface{}) error,
+	postMethod func(string, interface{}),
+	tickMethod func(tick int32)) {
 	if g.options.chLen <= 0 {
 		g.options.chLen = GPC_CHANNEL_LEN
 	}
@@ -42,9 +47,13 @@ func (g *gpcBase) init(callMethod func(string, interface{}, interface{}) error, 
 	if g.options.callTimeout == 0 {
 		g.options.callTimeout = GPC_CALL_TIMEOUT
 	}
+	if g.options.tickMs == 0 {
+		g.options.tickMs = GPC_TICK_MS
+	}
 	// 在这里给Run中调用的处理函数赋值，目前没有更好的方法，这算是最简单的做法了
 	g.callMethodFunc = callMethod
 	g.postMethodFunc = postMethod
+	g.tickMethodFunc = tickMethod
 	g.closeChan = make(chan struct{})
 }
 
@@ -106,24 +115,49 @@ func (g *gpcBase) Call(methodName string, param interface{}, result interface{})
 
 // 循环执行，为了不阻塞调用的goroutine，一般要加上go关键字再执行
 func (g *gpcBase) Run() {
+	var ticker *time.Ticker
+	if g.tickMethodFunc != nil {
+		ticker = time.NewTicker(time.Duration(g.options.tickMs * int32(time.Millisecond)))
+	}
+	lastTime := time.Now()
 	isRun := true
-	for isRun {
-		select {
-		case d := <-g.ch:
-			if d.result != nil {
-				// 开启一个计时器
-				if d.startTimerChan != nil {
-					d.startTimerChan <- time.NewTimer(time.Millisecond * GPC_CALL_TIMEOUT)
-				}
-				// 處理GPC調用
-				err := g.callMethodFunc(d.method, d.param, d.result)
-				d.errChan <- err
-			} else {
-				g.postMethodFunc(d.method, d.param)
+	if ticker != nil {
+		for isRun {
+			select {
+			case d := <-g.ch:
+				g.process(d)
+			case <-ticker.C:
+				now := time.Now()
+				tick := now.Sub(lastTime)
+				g.tickMethodFunc(int32(tick.Milliseconds()))
+				lastTime = now
+			case <-g.closeChan:
+				isRun = false
 			}
-		case <-g.closeChan:
-			isRun = false
 		}
+	} else {
+		for isRun {
+			select {
+			case d := <-g.ch:
+				g.process(d)
+			case <-g.closeChan:
+				isRun = false
+			}
+		}
+	}
+}
+
+func (g *gpcBase) process(d *data) {
+	if d.result != nil {
+		// 开启一个计时器
+		if d.startTimerChan != nil {
+			d.startTimerChan <- time.NewTimer(time.Millisecond * GPC_CALL_TIMEOUT)
+		}
+		// 處理GPC調用
+		err := g.callMethodFunc(d.method, d.param, d.result)
+		d.errChan <- err
+	} else {
+		g.postMethodFunc(d.method, d.param)
 	}
 }
 

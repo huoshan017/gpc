@@ -26,24 +26,40 @@ type service struct {
 	method map[string]*methodType // 已注册的方法
 }
 
+// 服务接口，必须要实现Tick
+type Service interface {
+	Tick(tick int32)
+}
+
 // gpc结构
 type GPC struct {
-	serviceMap map[string]interface{}
+	serviceMap map[string]*service
 	gpcBase
 }
 
 // 创建一个gpc
-func NewGPC(options ...GPCOption) *GPC {
-	gpc := &GPC{serviceMap: make(map[string]interface{})}
+func NewGPC(serv interface{}, options ...GPCOption) (*GPC, error) {
+	gpc := &GPC{serviceMap: make(map[string]*service)}
 	for _, option := range options {
 		option(gpc.options)
 	}
-	gpc.init(gpc.callMethod, gpc.postMethod)
-	return gpc
+	tickServ, ok := serv.(Service)
+	if !ok {
+		tickServ = nil
+	}
+	gpc.init(gpc.callMethod, gpc.postMethod, func() func(tick int32){
+		if tickServ != nil {
+			return tickServ.Tick
+		} else {
+			return nil
+		}
+	}())
+	err := gpc.register(serv)
+	return gpc, err
 }
 
 // 注册一个gpc服务
-func (g *GPC) Register(rcvr interface{}) error {
+func (g *GPC) register(rcvr interface{}) error {
 	s := &service{}
 	s.typ = reflect.TypeOf(rcvr)
 	s.rcvr = reflect.ValueOf(rcvr)
@@ -126,6 +142,10 @@ func suitableMethods(typ reflect.Type, reportErr bool) map[string]*methodType {
 		if method.PkgPath != "" {
 			continue
 		}
+		// 定时器函数跳过
+		if mname == "Tick" {
+			continue
+		}
 		// 方法需要三个传入参数： 接收者，参数，回复
 		if method.Type.NumIn() != 3 && method.Type.NumIn() != 2 {
 			if reportErr {
@@ -188,13 +208,12 @@ func (g *GPC) getMethod(method string) (svc *service, mtype *methodType, err err
 	serviceName := method[:dot]
 	methodName := method[dot+1:]
 
-	svci, o := g.serviceMap[serviceName]
+	svc, o := g.serviceMap[serviceName]
 	if !o {
 		err = errors.New("gpc: can't find service " + method)
 		return
 	}
 
-	svc = svci.(*service)
 	mtype = svc.method[methodName]
 	if mtype == nil {
 		err = errors.New("gpc: can't find method " + method)

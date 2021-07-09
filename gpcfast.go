@@ -7,6 +7,7 @@ import (
 // 调用处理器
 type Handler struct {
 	handlerMap map[string]func(param interface{}, result interface{}) error
+	tickHandle func(tick int32)
 }
 
 // 创建调用处理器
@@ -19,6 +20,11 @@ func NewHandler() *Handler {
 // 注册一个处理函数
 func (h *Handler) RegisterHandle(method string, handleFunc func(param interface{}, result interface{}) error) {
 	h.handlerMap[method] = handleFunc
+}
+
+// 设置定时器函数
+func (h *Handler) SetTickHandle(method string, handleFunc func(int32)) {
+	h.tickHandle = handleFunc
 }
 
 // 外部调用处理
@@ -44,7 +50,7 @@ func NewGPCFast(handler *Handler, options ...GPCOption) *GPCFast {
 	for _, option := range options {
 		option(gpc.options)
 	}
-	gpc.init(gpc.callMethod, gpc.postMethod)
+	gpc.init(gpc.callMethod, gpc.postMethod, handler.tickHandle)
 	return gpc
 }
 

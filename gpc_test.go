@@ -64,12 +64,17 @@ func (fmw *friendManagerWrapper) output(param interface{}, result interface{}) e
 	return nil
 }
 
+func (fmw *friendManagerWrapper) tick(tick int32) {
+
+}
+
 func TestFriend(t *testing.T) {
 	handler := NewHandler()
 	fmw := newFriendManagerWrapper()
 	handler.RegisterHandle("add", fmw.add)
 	handler.RegisterHandle("remove", fmw.remove)
 	handler.RegisterHandle("output", fmw.output)
+	handler.SetTickHandle("tick", fmw.tick)
 
 	idMax := 10000000
 	friendGpc := NewGPCFast(handler, ChannelLen(idMax))
@@ -163,10 +168,13 @@ func (f *FriendManagerProc) NoAction(arg *NoActionArgs) error {
 	return nil
 }
 
+func (f *FriendManagerProc) Tick(tick int32) {
+
+}
+
 func TestFriend2(t *testing.T) {
 	idLength := 10000000
-	gpcFriend := NewGPC(ChannelLen(idLength))
-	err := gpcFriend.Register(newFriendManagerProc())
+	gpcFriend, err := NewGPC(newFriendManagerProc(), ChannelLen(idLength))
 	if err != nil {
 		t.Error(err)
 		return
