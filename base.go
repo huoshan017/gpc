@@ -30,7 +30,7 @@ type gpcBase struct {
 	options        Options
 	ch             chan *data
 	callMethodFunc func(string, interface{}, interface{}) error
-	postMethodFunc func(string, interface{})
+	goMethodFunc   func(string, interface{})
 	tickMethodFunc func(tick int32)
 	closeChan      chan struct{}
 }
@@ -38,7 +38,7 @@ type gpcBase struct {
 // 初始化
 func (g *gpcBase) init(
 	callMethod func(string, interface{}, interface{}) error,
-	postMethod func(string, interface{}),
+	goMethod func(string, interface{}),
 	tickMethod func(tick int32)) {
 	if g.options.chLen <= 0 {
 		g.options.chLen = GPC_CHANNEL_LEN
@@ -52,13 +52,13 @@ func (g *gpcBase) init(
 	}
 	// 在这里给Run中调用的处理函数赋值，目前没有更好的方法，这算是最简单的做法了
 	g.callMethodFunc = callMethod
-	g.postMethodFunc = postMethod
+	g.goMethodFunc = goMethod
 	g.tickMethodFunc = tickMethod
 	g.closeChan = make(chan struct{})
 }
 
 // 外部调用无返回值的方法
-func (g *gpcBase) Post(methodName string, param interface{}) {
+func (g *gpcBase) Go(methodName string, param interface{}) {
 	// 调用数据
 	d := &data{
 		method: methodName,
@@ -157,7 +157,7 @@ func (g *gpcBase) process(d *data) {
 		err := g.callMethodFunc(d.method, d.param, d.result)
 		d.errChan <- err
 	} else {
-		g.postMethodFunc(d.method, d.param)
+		g.goMethodFunc(d.method, d.param)
 	}
 }
 

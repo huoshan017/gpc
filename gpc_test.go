@@ -91,8 +91,8 @@ func TestFriend(t *testing.T) {
 		for id := 1; id <= idMax; id++ {
 			f.id = id
 			f.name = fmt.Sprintf("f_%v", id)
-			friendGpc.Post("add", f)
-			friendGpc.Post("output", nil)
+			friendGpc.Go("add", f)
+			friendGpc.Go("output", nil)
 		}
 		wg.Done()
 	}()
@@ -103,7 +103,7 @@ func TestFriend(t *testing.T) {
 		for id := idMax; id >= 1; id-- {
 			friendGpc.Call("remove", id, &result)
 			if result {
-				friendGpc.Post("output", nil)
+				friendGpc.Go("output", nil)
 			}
 		}
 		wg.Done()
@@ -189,7 +189,7 @@ func TestFriend2(t *testing.T) {
 	go func() {
 		noArgs := &NoActionArgs{}
 		for id := 1; id <= idLength; id++ {
-			gpcFriend.Post("FriendManagerProc.NoAction", noArgs)
+			gpcFriend.Go("FriendManagerProc.NoAction", noArgs)
 		}
 	}()
 
