@@ -33,6 +33,7 @@ type Service interface {
 
 // gpc结构
 type GPC struct {
+	serv       interface{}
 	serviceMap map[string]*service
 	gpcBase
 }
@@ -47,7 +48,7 @@ func NewGPC(serv interface{}, options ...GPCOption) (*GPC, error) {
 	if !ok {
 		tickServ = nil
 	}
-	gpc.init(gpc.callMethod, gpc.postMethod, func() func(tick int32){
+	gpc.init(gpc.callMethod, gpc.postMethod, func() func(tick int32) {
 		if tickServ != nil {
 			return tickServ.Tick
 		} else {
@@ -56,6 +57,11 @@ func NewGPC(serv interface{}, options ...GPCOption) (*GPC, error) {
 	}())
 	err := gpc.register(serv)
 	return gpc, err
+}
+
+// 获得服务
+func (g *GPC) GetServ() interface{} {
+	return g.serv
 }
 
 // 注册一个gpc服务

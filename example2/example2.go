@@ -13,21 +13,21 @@ type friend struct {
 	name string
 }
 
-type friendManager struct {
+type FriendManager struct {
 	friendList map[int]*friend
 }
 
-func newFriendManager() *friendManager {
-	return &friendManager{
+func newFriendManager() *FriendManager {
+	return &FriendManager{
 		friendList: make(map[int]*friend, 100),
 	}
 }
 
-func (fm *friendManager) add(f *friend) {
+func (fm *FriendManager) add(f *friend) {
 	fm.friendList[f.id] = f
 }
 
-func (fm *friendManager) remove(id int) bool {
+func (fm *FriendManager) remove(id int) bool {
 	_, o := fm.friendList[id]
 	if !o {
 		return false
@@ -37,13 +37,34 @@ func (fm *friendManager) remove(id int) bool {
 }
 
 type FriendManagerProc struct {
-	fm *friendManager
+	fm *FriendManager
 }
 
 func newFriendManagerProc() *FriendManagerProc {
 	return &FriendManagerProc{
 		fm: newFriendManager(),
 	}
+}
+
+type Player struct {
+	id        int
+	name      string
+	friendMgr *FriendManager
+}
+
+func NewPlayer(id int, name string) *Player {
+	return &Player{
+		id:        id,
+		name:      name,
+		friendMgr: newFriendManager(),
+	}
+}
+
+func (p *Player) AddFriend(id int) bool {
+	return true
+}
+
+type PlayerManager struct {
 }
 
 type AddArgs struct {
